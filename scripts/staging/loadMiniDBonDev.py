@@ -44,6 +44,10 @@ def runload(load_command):
     if load_result != 0:
         sys.exit(load_result)
 
+def loadPostSQL():
+	print 'load views that break on pg_restore'
+	runload(options.postsql)
+
 matviews = ['raw_adu',
     'releases_raw',
     'product_adu',
@@ -99,16 +103,13 @@ print 'load most of the database'
 # load everything else but not indexes and constraints
 # needs to ignore errors
 
-os.system('/usr/local/pgsql/bin/pg_restore -j 3 -Fc --no-post-data -U postgres minidb.dump -d %s'
+os.system('/usr/local/pgsql/bin/pg_restore -j 3 -Fc --no-post-data -U postgres minidb.schema.dump -d %s'
+          % options.database_name)
+
+os.system('/usr/local/pgsql/bin/pg_restore --disable-triggers -a -j 4 -Fc --no-post-data -U postgres minidb.data.dump -d %s'
           % options.database_name)
 
 print 'load the truncated materialized views'
-
-# restore the matview schema
-# needs to ignore errors
-
-os.system('/usr/local/pgsql/bin/pg_restore -Fc --no-post-data -U postgres matview_schemas.dump -d %s'
-          % options.database_name)
 
 # restore matview data, one matview at a time
 
@@ -120,11 +121,10 @@ for matview in matviews:
 
 print 'restore indexes and constraints'
 
-runload('/usr/local/pgsql/bin/pg_restore -j 3 -Fc --post-data-only -U postgres minidb.dump -d %s' % options.database_name)
-runload('/usr/local/pgsql/bin/pg_restore -j 3 -Fc --post-data-only -U postgres matview_schemas.dump -d %s' % options.database_name)
+runload('/usr/local/pgsql/bin/pg_restore -j 3 -Fc --post-data-only -U postgres minidb.schema.dump -d %s' % options.database_name)
+#runload('/usr/local/pgsql/bin/pg_restore -j 3 -Fc --post-data-only -U postgres matview_schemas.dump -d %s' % options.database_name)
 
-# truncate soon-to-be-dropped tables
-# conn.disconnect()
+conn.disconnect()
 
 conn = psycopg2.connect("dbname=%s user=postgres" % options.database_name)
 
@@ -132,6 +132,7 @@ conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
 
 cur = conn.cursor()
 
+# truncate soon-to-be-dropped tables
 cur.execute("""
             DO $f$
             DECLARE tab TEXT;
@@ -146,16 +147,13 @@ cur.execute("""
             END; $f$;
         """)
 
-# load views which break on pg_restore, such as hang_report
-
-runload(options.postsql)
-
-#delete all the dump files
-
+# delete all the dump files
 runload('rm *.dump')
 
-# analyze
+# load views which break on pg_restore, such as hang_report
+loadPostSQL()
 
+# analyze
 cur.execute("""SET maintenance_work_mem = '512MB'""")
 cur.execute('ANALYZE')
 
