@@ -36,8 +36,8 @@ def rundump(dump_command):
 
 print "Extracting %s weeks of data" % options.num_weeks
 
-#connect to postgresql
-conn = psycopg2.connect("dbname=%s user=postgres" % options.database_name)
+# connect to postgresql
+conn = psycopg2.connect("dbname=%s user=postgres port=5499" % options.database_name)
 
 cur = conn.cursor()
 
@@ -71,37 +71,57 @@ cutoff_date = str(cur.fetchone()[0])
 # and tables with data that needs to be cleaned
 # dump those with no data
 
-matviews = {'raw_adu'
+matviews = {
+'raw_adu'
     : """SELECT * FROM raw_adu WHERE raw_adu.date >= '%s'""" % cutoff_date,
-    'releases_raw'
+'releases_raw'
     : """SELECT releases_raw.* FROM releases_raw WHERE build_date(build_id)
         >= ( DATE '%s' - 180 ) """ % cutoff_date,
-    'product_adu' : """SELECT product_adu.* FROM product_adu WHERE adu_date >= '%s'""" % cutoff_date,
-    'tcbs' : """SELECT tcbs.* FROM tcbs WHERE report_date >= '%s'""" % cutoff_date,
-    'tcbs_build' : """SELECT * FROM tcbs_build WHERE build_date >= '%s'""" % cutoff_date,
-    'sessions' : """SELECT * FROM sessions WHERE false""",
-    'server_status' : """SELECT * FROM server_status WHERE false""",
-    'reports_bad' : """SELECT * FROM reports_bad WHERE false""",
-    'reports_duplicates'
+'product_adu' 
+    : """SELECT product_adu.* FROM product_adu WHERE adu_date >= '%s'""" % cutoff_date,
+'tcbs' 
+    : """SELECT tcbs.* FROM tcbs WHERE report_date >= '%s'""" % cutoff_date,
+'tcbs_build' 
+    : """SELECT * FROM tcbs_build WHERE build_date >= '%s'""" % cutoff_date,
+'sessions' 
+    : """SELECT * FROM sessions WHERE false""",
+'server_status' 
+    : """SELECT * FROM server_status WHERE false""",
+'reports_bad' 
+    : """SELECT * FROM reports_bad WHERE false""",
+'reports_duplicates'
     : """SELECT * FROM reports_duplicates WHERE date_processed >= '%s'""" % cutoff_date,
-    'daily_hangs'
+'daily_hangs'
     : """SELECT * FROM daily_hangs WHERE report_date >= '%s'""" % cutoff_date,
-    'build_adu' : """SELECT * FROM build_adu WHERE build_date >= '%s'""" % cutoff_date,
-    'crashes_by_user' : """SELECT * FROM crashes_by_user WHERE report_date >= '%s'""" % cutoff_date,
-    'crashes_by_user_build' : """SELECT * FROM crashes_by_user_build WHERE build_date >= '%s'""" % cutoff_date,
-    'home_page_graph' : """SELECT * FROM home_page_graph WHERE report_date >= '%s'""" % cutoff_date,
-    'home_page_graph_build' : """SELECT * FROM home_page_graph_build WHERE build_date >= '%s'""" % cutoff_date,
-    'nightly_builds' : """SELECT * FROM nightly_builds WHERE report_date >= '%s'""" % cutoff_date
-    }
+'build_adu' 
+    : """SELECT * FROM build_adu WHERE build_date >= '%s'""" % cutoff_date,
+'crashes_by_user' 
+    : """SELECT * FROM crashes_by_user WHERE report_date >= '%s'""" % cutoff_date,
+'crashes_by_user_build' 
+    : """SELECT * FROM crashes_by_user_build WHERE build_date >= '%s'""" % cutoff_date,
+'home_page_graph' 
+    : """SELECT * FROM home_page_graph WHERE report_date >= '%s'""" % cutoff_date,
+'home_page_graph_build' 
+    : """SELECT * FROM home_page_graph_build WHERE build_date >= '%s'""" % cutoff_date,
+'nightly_builds' 
+    : """SELECT * FROM nightly_builds WHERE report_date >= '%s'""" % cutoff_date
+}
 
-no_dump_all = no_dump + ' -T "priority_jobs_*" -T ' + ' -T '.join(matviews)
+# PROBLEM: Some real views depend on these matviews
+no_dump_schema_all = no_dump + ' -T "priority_jobs_*" '
+no_dump_data_all = no_dump_schema_all + ' -T ' +  ' -T '.join(matviews)
+
 # don't dump priority jobs queues either
 
 print "truncating all data before %s" % cutoff_date
 
-#pg_dump most of the database
-print 'dumping most of the database'
-rundump('pg_dump -Fc -U postgres ' + no_dump_all + ' breakpad -f minidb.dump')
+# Break the dumps into SCHEMA-ONLY and DATA-ONLY
+# pg_dump most of the database
+print 'dumping most of the database schema'
+rundump('pg_dump -Fc -U postgres -s ' + no_dump_schema_all + ' breakpad -f minidb.schema.dump')
+
+print 'dumping most of the database data'
+rundump('pg_dump -Fc -U postgres -a ' + no_dump_data_all + ' breakpad -f minidb.data.dump')
 
 # copy truncated data for each matview
 
@@ -109,9 +129,6 @@ for matview in matviews:
         print 'dumping %s' % matview
         dumpstring = """psql -U postgres -c "\copy ( """ + matviews[matview] + """ ) to """ + matview + """.dump" breakpad"""
         rundump(dumpstring)
-
-# dump the schema for the matviews:
-rundump('pg_dump -Fc -s -t' + ' -t '.join(matviews) + ' -f matview_schemas.dump breakpad')
 
 #DUMP the users and logins
 

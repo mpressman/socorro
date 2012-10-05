@@ -9,7 +9,9 @@ set -e
 CURDIR=$(dirname $0)
 
 # load all views in this directory
-psql -f $CURDIR/*.sql breakpad
+for file in `ls -1 $CURDIR/*.sql`; do
+        psql -f $file breakpad
+done
 
 #done
 exit 0
