@@ -124,7 +124,7 @@ print 'restore indexes and constraints'
 runload('/usr/local/pgsql/bin/pg_restore -j 3 -Fc --post-data-only -U postgres minidb.schema.dump -d %s' % options.database_name)
 #runload('/usr/local/pgsql/bin/pg_restore -j 3 -Fc --post-data-only -U postgres matview_schemas.dump -d %s' % options.database_name)
 
-conn.disconnect()
+conn.close()
 
 conn = psycopg2.connect("dbname=%s user=postgres" % options.database_name)
 
