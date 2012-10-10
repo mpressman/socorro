@@ -2,6 +2,8 @@
 
 BEGIN;
 
+DROP VIEW IF EXISTS product_os_crash_ratio;
+DROP VIEW IF EXISTS product_crash_ratio;
 DROP VIEW IF EXISTS crashes_by_user_rollup;
 
 CREATE VIEW crashes_by_user_rollup AS
@@ -13,8 +15,6 @@ SELECT product_version_id, report_date,
 			JOIN crash_types USING (crash_type_id)
 	 WHERE crash_types.include_agg
 	 GROUP BY product_version_id, report_date, os_short_name;
-
-DROP VIEW IF EXISTS product_crash_ratio;
 
 CREATE OR REPLACE VIEW product_crash_ratio AS
 SELECT crcounts.product_version_id, product_versions.product_name,
@@ -33,8 +33,6 @@ GROUP BY crcounts.product_version_id, product_versions.product_name,
 
 ALTER VIEW product_crash_ratio OWNER TO breakpad_rw;
 GRANT SELECT ON product_crash_ratio TO analyst;
-
-DROP VIEW IF EXISTS product_os_crash_ratio;
 
 CREATE OR REPLACE VIEW product_os_crash_ratio AS
 SELECT crcounts.product_version_id, product_versions.product_name,
